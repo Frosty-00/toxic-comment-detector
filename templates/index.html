@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HoopVision / E-Sports Toxic Filter AI</title>
+    <style>
+        /* 赛博朋克暗黑主题 */
+        body { background-color: #0d0d12; color: #00ffcc; font-family: 'Courier New', Courier, monospace; margin: 0; display: flex; height: 100vh; }
+        .panel { padding: 20px; border: 1px solid #333; height: 100%; box-sizing: border-box; }
+        
+        /* 左侧聊天模拟器 (2A) */
+        .chat-section { width: 60%; display: flex; flex-direction: column; border-right: 2px solid #00ffcc; }
+        .chat-history { flex-grow: 1; overflow-y: auto; padding: 10px; background: #111; margin-bottom: 20px; border-radius: 5px; }
+        .message { margin-bottom: 10px; padding: 8px; border-radius: 4px; border-left: 4px solid #00ffcc; background: #1a1a24; }
+        .message.toxic { border-left-color: #ff003c; color: #ff4d4d; text-decoration: line-through; }
+        
+        .input-area { display: flex; gap: 10px; }
+        input[type="text"] { flex-grow: 1; padding: 15px; background: #222; border: 1px solid #00ffcc; color: #fff; font-size: 16px; outline: none; }
+        button { padding: 15px 30px; background: transparent; border: 2px solid #00ffcc; color: #00ffcc; cursor: pointer; font-weight: bold; transition: 0.3s; }
+        button:hover { background: #00ffcc; color: #000; }
+
+        /* 右侧分析面板 */
+        .analysis-section { width: 40%; display: flex; flex-direction: column; gap: 20px; }
+        
+        /* 状态监控灯 (加分项 1) */
+        .status-header { display: flex; align-items: center; justify-content: space-between; font-size: 20px; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .indicator { width: 15px; height: 15px; border-radius: 50%; background-color: #00ffcc; box-shadow: 0 0 10px #00ffcc; transition: 0.3s; }
+        .indicator.thinking { background-color: #ffcc00; box-shadow: 0 0 15px #ffcc00; animation: blink 0.5s infinite; }
+        .indicator.alert { background-color: #ff003c; box-shadow: 0 0 15px #ff003c; }
+        @keyframes blink { 50% { opacity: 0.5; } }
+
+        /* 统计数据 (加分项 2) */
+        .stats-box { background: #1a1a24; padding: 15px; border: 1px solid #444; }
+        .stats-box span { font-size: 24px; color: #fff; }
+
+        /* 动态能量条 (3A) */
+        .bar-container { margin-bottom: 15px; }
+        .bar-label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; color: #aaa; }
+        .bar-bg { width: 100%; background: #333; height: 10px; border-radius: 5px; overflow: hidden; }
+        .bar-fill { height: 100%; background: #00ffcc; width: 0%; transition: width 0.5s ease-out, background-color 0.3s; }
+    </style>
+</head>
+<body>
+
+    <div class="panel chat-section">
+        <div class="status-header">
+            <span>🎮 Live Game Lobby (Area 51)</span>
+        </div>
+        <div class="chat-history" id="chatHistory">
+            <div class="message">[System] Welcome to the server. AI Moderator is active.</div>
+        </div>
+        <div class="input-area">
+            <input type="text" id="chatInput" placeholder="Type a message to the team..." autocomplete="off">
+            <button onclick="sendMessage()">SEND [⏎]</button>
+        </div>
+    </div>
+
+    <div class="panel analysis-section">
+        <div class="status-header">
+            <span>🧠 AI Core Analysis</span>
+            <div class="indicator" id="statusLight"></div>
+        </div>
+
+        <div class="stats-box">
+            <div>Messages Scanned: <span id="totalMsgs">0</span></div>
+            <div style="margin-top: 10px; color: #ff003c;">Threats Blocked: <span id="blockedMsgs">0</span></div>
+            <div style="margin-top: 10px;">Engine Status: <span id="engineStatus">Checking...</span></div>
+        </div>
+
+        <div id="progressBars">
+            </div>
+    </div>
+
+    <script>
+        // 初始化能量条标签
+        const labels = ['toxic', 'severe_toxic', 'obscene', 'threat', 'insult', 'identity_hate'];
+        const progressBarsDiv = document.getElementById('progressBars');
+        
+        labels.forEach(label => {
+            progressBarsDiv.innerHTML += `
+                <div class="bar-container">
+                    <div class="bar-label"><span>${label.toUpperCase()}</span><span id="score-${label}">0%</span></div>
+                    <div class="bar-bg"><div class="bar-fill" id="bar-${label}"></div></div>
+                </div>
+            `;
+        });
+
+        let total = 0; let blocked = 0;
+        const inputField = document.getElementById('chatInput');
+        const statusLight = document.getElementById('statusLight');
+        const engineStatus = document.getElementById('engineStatus');
+        let engineReady = false;
+
+        async function checkHealth() {
+            try {
+                const response = await fetch('/api/health');
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                const health = await response.json();
+
+                engineReady = !!health.ready;
+                if (engineReady) {
+                    statusLight.className = 'indicator';
+                    engineStatus.innerText = `READY (${health.device})`;
+                    const chatHistory = document.getElementById('chatHistory');
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'message';
+                    msgDiv.innerText = `[System] AI 引擎已就绪: ${health.model_path}`;
+                    chatHistory.appendChild(msgDiv);
+                    chatHistory.scrollTop = chatHistory.scrollHeight;
+                } else {
+                    statusLight.className = 'indicator alert';
+                    engineStatus.innerText = 'NOT READY';
+                    const chatHistory = document.getElementById('chatHistory');
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = 'message toxic';
+                    msgDiv.innerText = `[System] AI 引擎未就绪: ${health.error || 'unknown error'}`;
+                    chatHistory.appendChild(msgDiv);
+                    chatHistory.scrollTop = chatHistory.scrollHeight;
+                }
+            } catch (error) {
+                engineReady = false;
+                statusLight.className = 'indicator alert';
+                engineStatus.innerText = 'UNREACHABLE';
+                const chatHistory = document.getElementById('chatHistory');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'message toxic';
+                msgDiv.innerText = `[System] 健康检查失败: ${error.message}`;
+                chatHistory.appendChild(msgDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+        }
+
+        // 加分项 1: 打字时指示灯变黄闪烁
+        inputField.addEventListener('input', () => {
+            if(inputField.value.trim().length > 0) {
+                statusLight.className = 'indicator thinking';
+            } else {
+                statusLight.className = 'indicator';
+            }
+        });
+
+        // 按回车键发送
+        inputField.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+
+        async function sendMessage() {
+            const text = inputField.value.trim();
+            if (!text) return;
+            if (!engineReady) {
+                const chatHistory = document.getElementById('chatHistory');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'message toxic';
+                msgDiv.innerText = '[System] AI 引擎尚未就绪，请先检查右侧 Engine Status。';
+                chatHistory.appendChild(msgDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+                return;
+            }
+            
+            inputField.value = '';
+            statusLight.className = 'indicator thinking'; // AI 正在思考
+
+            try {
+                // 向 FastAPI 后端发送请求
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: text })
+                });
+                if (!response.ok) {
+                    let errorText = `HTTP ${response.status}`;
+                    try {
+                        const errorData = await response.json();
+                        errorText = errorData.detail || errorData.error || errorText;
+                    } catch (_) {
+                        // ignore json parse error and keep HTTP status
+                    }
+                    throw new Error(errorText);
+                }
+                const data = await response.json();
+
+                // 更新状态灯和统计 (加分项 2)
+                total++;
+                if(data.is_toxic) {
+                    blocked++;
+                    statusLight.className = 'indicator alert';
+                } else {
+                    statusLight.className = 'indicator';
+                }
+                
+                document.getElementById('totalMsgs').innerText = total;
+                document.getElementById('blockedMsgs').innerText = blocked;
+
+                // 将消息添加到聊天大厅
+                const chatHistory = document.getElementById('chatHistory');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = data.is_toxic ? 'message toxic' : 'message';
+                msgDiv.innerText = data.is_toxic ? `[BLOCKED BY AI] ${text.replace(/[a-zA-Z0-9]/g, '*')}` : `[Player] ${text}`;
+                chatHistory.appendChild(msgDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+
+                // 更新动态能量条 (3A)
+                labels.forEach(label => {
+                    const score = (data.scores[label] * 100).toFixed(1);
+                    document.getElementById(`score-${label}`).innerText = `${score}%`;
+                    const bar = document.getElementById(`bar-${label}`);
+                    bar.style.width = `${score}%`;
+                    bar.style.backgroundColor = score > 50 ? '#ff003c' : '#00ffcc'; // 超过 50% 变红
+                });
+
+            } catch (error) {
+                console.error("AI 引擎连接失败:", error);
+                statusLight.className = 'indicator alert';
+                const chatHistory = document.getElementById('chatHistory');
+                const msgDiv = document.createElement('div');
+                msgDiv.className = 'message toxic';
+                msgDiv.innerText = `[System] AI 引擎错误: ${error.message}`;
+                chatHistory.appendChild(msgDiv);
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            }
+        }
+
+        checkHealth();
+    </script>
+</body>
+</html>
