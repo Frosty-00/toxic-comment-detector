@@ -35,7 +35,7 @@ gp/
 │   ├── per_label_metrics.csv       # 各标签评估指标
 │   └── threshold_strategy_compare.csv
 └── data/
-    └── train.csv                   # Kaggle 原始数据（需手动下载，见下方）
+    └── train.csv                   # Kaggle 原始训练数据（已包含在仓库中）
 ```
 
 ---
@@ -152,20 +152,6 @@ python -m ipykernel install --user --name=gp-venv --display-name "Python (gp-ven
 > ```
 
 ---
-
-### 第九步：下载 Kaggle 数据集
-
-Notebook 需要 `data/train.csv`（原始 Kaggle 数据集，因文件过大未上传至 GitHub）。
-
-1. 前往 [Kaggle Toxic Comment Classification Challenge](https://www.kaggle.com/c/jigsaw-toxic-comment-classification-challenge/data)
-2. 登录 Kaggle 账号，下载 `train.csv.zip`
-3. 解压后，将 `train.csv` 放到项目的 `data/` 文件夹下：
-
-```
-gp/
-└── data/
-    └── train.csv   ← 放在这里
-```
 
 ---
 
